@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://alaz-software.vercel.app/sitemap.xml
