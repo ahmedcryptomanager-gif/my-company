@@ -83,14 +83,23 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify({ from: 'شركة العز <' + fromEmail + '>', to: [to], subject: subject, html: html })
       });
       if (!r.ok) {
-        var t = await r.text().catch(function () { return ''; });
-        throw new Error('resend ' + r.status + ' ' + t.slice(0, 200));
+        var err = new Error('resend failed');
+        err.providerStatus = r.status;
+        try { await r.text(); } catch (e) {}
+        throw err;
       }
+      try {
+        var data = await r.json();
+        return data && data.id ? data.id : '';
+      } catch (e) { return ''; }
     };
-    await send(ownerEmail, ownerSubject, ownerHtml);
-    await send(email, guestSubject, guestHtml);
+    var ownerId = await send(ownerEmail, ownerSubject, ownerHtml);
+    var guestId = await send(email, guestSubject, guestHtml);
     return res.status(200).json({ ok: true });
   } catch (e) {
-    return res.status(502).json({ ok: false, error: 'send' });
+    var code = (e && e.providerStatus) ? e.providerStatus : 0;
+    try { console.error('contact mail failed, provider status: ' + code); } catch (x) {}
+    // code: حالة HTTP من مزود البريد فقط (401 مفتاح، 403 مرسل/مستلم، 422 تحقق) — بلا تفاصيل داخلية
+    return res.status(502).json({ ok: false, error: 'send', code: code });
   }
 };
