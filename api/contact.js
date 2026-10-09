@@ -14,6 +14,25 @@ function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// حد معدل بسيط داخل الذاكرة (أفضل جهد في Serverless) — يمنع إساءة استخدام مفتاح البريد.
+// لا يغير الحقول أو التصميم أو آلية واتساب: main.js يحوّل أي فشل إلى واتساب تلقائيًا.
+var RATE_WINDOW_MS = 10 * 60 * 1000;
+var RATE_LIMIT = 10;
+function rateLimited(ip) {
+  try {
+    if (!global.__contactRate) global.__contactRate = new Map();
+    var now = Date.now();
+    var arr = global.__contactRate.get(ip) || [];
+    var fresh = [];
+    for (var i = 0; i < arr.length; i++) { if (now - arr[i] < RATE_WINDOW_MS) fresh.push(arr[i]); }
+    if (fresh.length >= RATE_LIMIT) { global.__contactRate.set(ip, fresh); return true; }
+    fresh.push(now);
+    global.__contactRate.set(ip, fresh);
+    if (global.__contactRate.size > 2000) global.__contactRate.clear();
+    return false;
+  } catch (e) { return false; }
+}
+
 module.exports = async function handler(req, res) {
   var origin = req.headers.origin || '';
   if (ALLOWED_ORIGINS.indexOf(origin) !== -1) {
@@ -27,6 +46,13 @@ module.exports = async function handler(req, res) {
   }
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'method' });
+  }
+
+  // حماية معدل الطلبات لكل IP — تُرجع 429 فيتجاهلها main.js بأمان نحو واتساب.
+  var fwd = req.headers['x-forwarded-for'] || '';
+  var clientIp = String(fwd).split(',')[0].trim().slice(0, 64) || 'unknown';
+  if (rateLimited('contact:' + clientIp)) {
+    return res.status(429).json({ ok: false, error: 'rate' });
   }
 
   var body = req.body || {};
@@ -51,7 +77,10 @@ module.exports = async function handler(req, res) {
   }
 
   var apiKey = process.env.RESEND_API_KEY;
+  // OWNER_EMAIL مستخدم فعليًا كمستلم إشعار المالك — لا تغيّره دون تحديث Vercel Env.
   var ownerEmail = process.env.OWNER_EMAIL || 'info@alazsoftware.com';
+  // الإنتاج يتطلب FROM_EMAIL بنطاق موثّق في Resend (مثل info@alazsoftware.com).
+  // القيمة الاحتياطية onboarding@resend.dev للتجربة فقط وستفشل (403→502) مع مستلمين غير مالك حساب Resend.
   var fromEmail = process.env.FROM_EMAIL || 'onboarding@resend.dev';
   if (!apiKey) {
     return res.status(500).json({ ok: false, error: 'config' });
