@@ -74,26 +74,39 @@
     });
   }
 
-  // 5. تحقق نموذج التواصل (contact.html)
+  // 5. تحقق نموذج التواصل (contact.html) + إرسال بريد عبر API
+  // endpoint الدالة: على Vercel نفس الدومين (/api/contact)، وعلى GitHub Pages عبر رابط Vercel
+  var CONTACT_API = (function () {
+    if (location.hostname.indexOf('vercel.app') !== -1 || location.hostname === 'alazsoftware.com' || location.hostname.indexOf('alazsoftware') !== -1) {
+      return '/api/contact';
+    }
+    return 'https://my-company-xi-nine.vercel.app/api/contact';
+  })();
   var form = document.getElementById('contact-form');
   if (form) {
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       var name = form.querySelector('#cf-name');
       var phone = form.querySelector('#cf-phone');
+      var email = form.querySelector('#cf-email');
       var msg = form.querySelector('#cf-msg');
       var typeSel = form.querySelector('#cf-type');
+      var consent = form.querySelector('#cf-consent');
+      var hp = form.querySelector('#cf-website');
       var err = form.querySelector('.form-error');
       var ok = form.querySelector('.form-success');
-      if (!name || !phone || !msg) {
+      if (!name || !phone || !email || !msg) {
         if (err) err.textContent = 'تعذر العثور على حقول النموذج. حدّث الصفحة وحاول مجدداً.';
         return;
       }
       if (err) err.textContent = '';
       if (ok) ok.textContent = '';
+      if (hp && hp.value) return; // سبام: تجاهل بصمت
       var phoneRe = /^\+?[0-9][0-9\s-]{5,15}$/;
+      var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
       var nameVal = name.value.trim().slice(0, 60);
       var phoneVal = phone.value.trim().slice(0, 17);
+      var emailVal = email.value.trim().slice(0, 100);
       var msgVal = msg.value.trim().slice(0, 1000);
       if (!nameVal || nameVal.length < 2) {
         if (err) err.textContent = 'يرجى إدخال الاسم (حرفان على الأقل).';
@@ -105,23 +118,56 @@
         phone.focus();
         return;
       }
+      if (!emailRe.test(emailVal)) {
+        if (err) err.textContent = 'يرجى إدخال بريد إلكتروني صحيح.';
+        email.focus();
+        return;
+      }
       if (!msgVal || msgVal.length < 10) {
         if (err) err.textContent = 'يرجى كتابة رسالتك (10 أحرف على الأقل).';
         msg.focus();
         return;
       }
+      if (consent && !consent.checked) {
+        if (err) err.textContent = 'يرجى الموافقة على مراسلتك بخصوص استفسارك.';
+        consent.focus();
+        return;
+      }
+      var typeVal = typeSel ? typeSel.value : '';
       var typeLabel = typeSel && typeSel.options && typeSel.selectedIndex >= 0
         ? typeSel.options[typeSel.selectedIndex].text
         : '';
       var text = encodeURIComponent(
-        'الاسم: ' + nameVal + '\nالجوال: ' + phoneVal +
+        'الاسم: ' + nameVal + '\nالجوال: ' + phoneVal + '\nالبريد: ' + emailVal +
         (typeLabel ? '\nالنوع: ' + typeLabel : '') + '\n' + msgVal
       );
-      if (ok) ok.textContent = 'تم التحقق بنجاح! جارٍ تحويلك إلى واتساب...';
-      setTimeout(function () {
-        var win = window.open('https://wa.me/967712953014?text=' + text, '_blank');
-        if (win) win.opener = null;
-      }, 700);
+      var waUrl = 'https://wa.me/967712953014?text=' + text;
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      if (ok) ok.textContent = 'جارٍ إرسال رسالتك...';
+      fetch(CONTACT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameVal, phone: phoneVal, email: emailVal, type: typeVal, message: msgVal, website: hp ? hp.value : '' })
+      }).then(function (res) {
+        if (!res.ok) throw new Error('api');
+        if (ok) ok.textContent = 'تم استلام رسالتك! أرسلنا لك رسالة ترحيب على بريدك، ويمكنك أيضاً متابعتنا واتساب.';
+        form.reset();
+        var wa = document.createElement('p');
+        wa.innerHTML = '<a class="btn gold service-cta" target="_blank" rel="noopener">متابعة عبر واتساب</a>';
+        wa.querySelector('a').href = waUrl;
+        if (ok && ok.parentNode) ok.parentNode.insertBefore(wa, ok.nextSibling);
+        setTimeout(function () { if (wa.parentNode) wa.parentNode.removeChild(wa); }, 30000);
+      }).catch(function () {
+        // بديل واتساب عند تعطل خدمة البريد
+        if (ok) ok.textContent = 'تعذر الإرسال بالبريد حالياً — جارٍ تحويلك إلى واتساب...';
+        setTimeout(function () {
+          var win = window.open(waUrl, '_blank');
+          if (win) win.opener = null;
+        }, 700);
+      }).then(function () {
+        if (btn) btn.disabled = false;
+      });
     });
   }
 })();

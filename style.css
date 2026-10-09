@@ -834,9 +834,40 @@ textarea:focus-visible {
     font-size: 17px;
 }
 
+/* موافقة المراسلة + حقل مكافحة السبام */
+.consent-group {
+    margin-top: 4px;
+}
+
+.consent-label {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-weight: normal;
+    color: #c9c9c9;
+    cursor: pointer;
+}
+
+.consent-label input {
+    margin-top: 6px;
+    accent-color: #D4A63A;
+}
+
+.hp-field {
+    position: absolute;
+    left: -9999px;
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+}
+
 /* زر خدمة */
 .service-cta {
     margin-top: 15px;
+}
+
+a.service-cta.btn {
+    display: inline-block;
 }
 
 /* وصف المشروع */
